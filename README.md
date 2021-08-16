@@ -1,5 +1,5 @@
 <h1>Документация API запросов сервера для "apepe"</h1>
-server - "https://fierce-sierra-39213.herokuapp.com/" <br/>
+server - "https://evening-headland-35927.herokuapp.com/" <br/>
 `GET - /getUser/{user id : string}` - получить данные пользователя <br/> 
 `GET - /setOnline/{user id : string}/{check : bool}` - устоновить в сети или не в сети пользователь <br/>
 `GET - /getPost/{post id : string}` - получить данные основной ветки постов <br/>
