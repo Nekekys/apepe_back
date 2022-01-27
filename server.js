@@ -1,4 +1,3 @@
-
 const express = require('express');
 const bodyParser = require("body-parser");
 const app = express();
@@ -7,11 +6,16 @@ const cors = require('cors')
 const multer  = require("multer");
 const fs = require('fs')
 const path = require('path')
+const events = require('events')
+
+
 /*const mongoose = require("mongoose")*/
 let brain = require('brain.js');
 let net =  new brain.NeuralNetwork();
 net.fromJSON(require('./data/mnistTrain'));
 const PORT = process.env.PORT || 3001
+const emitter = new events.EventEmitter()
+
 
 const avatarArray = ["https://memepedia.ru/wp-content/uploads/2016/07/GaecXsgZG8Y.jpg","https://www.meme-arsenal.com/memes/049799fd8f36365270444d2aa48de122.jpg",
     "https://avatars.mds.yandex.net/get-zen_doc/1945572/pub_5d6df7efbf50d500ae1fe15e_5d6df8298c5be800aff354a9/scale_1200","https://www.meme-arsenal.com/memes/8c39f83458ca87b0b75cea622c6b096d.jpg",
@@ -23,7 +27,6 @@ const storageConfig = multer.diskStorage({
     },
     filename: (req, file, cb) =>{
        // cb(null, file.originalname);
-
         cb(null,  Date.now() + file.originalname);
     }
 });
@@ -275,7 +278,11 @@ app.post('/setPost/:id', function (req,res) {
     })
 })
 
-
+app.get('/subscriptionBranchPost/:userId/:postId', function (req,res) { // long pulling - реализация
+    emitter.once('newPost', (post) => {
+        res.send(post)
+    })
+})
 
 
 app.post('/setBranchPost/:userId/:postId', function (req,res) { //пост в ветку
@@ -328,24 +335,16 @@ app.post('/setBranchPost/:userId/:postId', function (req,res) { //пост в в
                             id: req.params.userId,
                             idPost: req.body.post.mainPostId
                         }
-
-
                     userCollection.findOneAndUpdate({_id: ObjectId(req.params.userId)}, {$push: {"notification.arrayNotification":object},$inc: {"notification.countNotification":1}},
                         function (err, user2) {
                             if (err) return console.log(err)
                             // res.send({check: true})
                         })
-
-
                 })
             }
-
-
-
-
+            emitter.emit('newPost', req.body.post)
             res.send(req.body.post)
         })
-
 })
 
 app.get('/countMainPost/:userId/:postId', function (req,res) {
