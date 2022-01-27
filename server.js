@@ -35,7 +35,8 @@ app.use(bodyParser.json({limit: '50mb'}));
 app.use(bodyParser.urlencoded({limit: '50mb',extended: true}));
 
 app.use(cors({
-    origin: true,//'http://localhost:3000', //'http://localhost:3002'
+    origin: "https://apepe.surge.sh",//'http://localhost:3000', //'http://localhost:3002' //https://apepe.surge.sh
+    "Access-Control-Allow-Origin": '*',
     methods: ['POST', 'PUT', 'GET', 'OPTIONS', 'HEAD'],
     credentials: true
 }))
@@ -107,11 +108,9 @@ app.post('/LoginIn', function (req,res) {
 
         if(user){
             if(req.body.password === user.password){
-                res.cookie('login', req.body.login, {secure: true})
-                res.cookie('password', req.body.password, {secure: true})
                 res.send({check: true, user: user})
             }else {
-                res.send({check: false, err: 'Не правильный пароль'})
+                res.send({check: false, err: 'Неправильный пароль'})
             }
         }else{
             res.send({check: false, err: 'Такого пользователя не существует'})
@@ -120,14 +119,17 @@ app.post('/LoginIn', function (req,res) {
 
 })
 
-app.get('/cookie', function (req,res) {
-    console.log(req.cookies)
+
+
+
+app.post('/cookie', function (req,res) {
+
     const collection = req.app.locals.collection.collection("users");
-    collection.findOne({login: req.cookies.login}, function(err, user){
+    collection.findOne({login: req.body.login}, function(err, user){
         if(err) return console.log(err);
 
         if(user){
-            if(req.cookies.password === user.password){
+            if(req.body.password === user.password){
                 let check = true
                 let obj = {
                     id: user._id,
@@ -146,7 +148,7 @@ app.get('/cookie', function (req,res) {
                 res.send({check: true, user: user})
 
             }else {
-                res.send({check: false, login: req.cookies.login})
+                res.send({check: false, login: req.body.login})
             }
         }else{
             res.send({check: false})
@@ -154,10 +156,10 @@ app.get('/cookie', function (req,res) {
     })
 })
 
-app.get('/LoginOut', function (req,res) {
+/*app.get('/LoginOut', function (req,res) {
     res.clearCookie('password')
     res.send('Clear cookie')
-})
+})*/
 
 app.post('/registration', (req, res) => {
     let check = false
@@ -178,7 +180,7 @@ app.post('/registration', (req, res) => {
                     name: req.body.name,
                     lastName: req.body.lastName,
                     stringName: req.body.name + " " + req.body.lastName,
-                    online: false,
+                    online: true,
                     birthday: 1619032458843,
                     avatar: avatarArray[Math.floor(Math.random() * avatarArray.length)],
                     login: req.body.login,
@@ -188,12 +190,15 @@ app.post('/registration', (req, res) => {
                     background: {
                         url: "https://cdn.igromania.ru/mnt/news/c/5/a/d/4/0/74239/f1332090f94100aa_1200xH.jpg",
                         repeatBackground: false
+                    },
+                    notification: {
+                        countNotification: 0,
+                        arrayNotification: []
                     }
                 }
                 collection.insertOne(user, function (err, results) {
                     if(err) return res.send({check: false, err: "Не удалось зарегестрировать"})
-                    res.cookie('login', req.body.login, {secure: true})
-                    res.cookie('password', req.body.password, {secure: true})
+
                     res.send({check: true,user: user})
                     /*console.log(results.ops[0]._id)*/ // возращаем id
                     let post2 = {
@@ -279,7 +284,7 @@ app.post('/setBranchPost/:userId/:postId', function (req,res) { //пост в в
     collection.findOneAndUpdate({userId: req.params.userId,postId: req.params.postId}, {$push: {"branchPosts": req.body.post}},
         function (err, post) {
             if(err) return console.log(err)
-
+            console.log(req.body.post.senderID)
             if(post.value == null){
                 let newPost = {
                     userId: req.params.userId,
@@ -294,22 +299,56 @@ app.post('/setBranchPost/:userId/:postId', function (req,res) { //пост в в
                 })
             }
 
-            //const collectionTwo = req.app.locals.collection.collection("post");
-            /*collectionTwo.updateOne({userID: ObjectId(req.params.userId)},
-                {
-                    $inc: { "mainPagePost.$[elem].countAnswer" : 1 }
-                },
-                { arrayFilters: [ { "elem.id": req.params.postId } ]},
-                function (err, data) {
-                    if(err) return console.log(err)
-                    res.send(req.body.post)
-                })*/
+            if(req.body.post.senderID !== req.params.userId){
+                const userCollection = req.app.locals.collection.collection("users");
+                userCollection.findOne({_id: ObjectId(req.body.post.senderID)},function (err, user) {
+                    if (err) return console.log(err)
+                    let object
+                    if(req.body.post.answerCheck){
+                        object = {
+                            type: "answer",
+                            name: user.name,
+                            lastName:  user.lastName,
+                            date: Date.now(),
+                            id: req.params.userId,
+                            idPost: req.body.post.mainPostId,
+                            idHost: req.body.post.senderID
+                        }
+                        userCollection.findOneAndUpdate({_id: ObjectId(req.body.post.answerUserId)}, {$push: {"notification.arrayNotification":object},$inc: {"notification.countNotification":1}},
+                            function (err, user2) {
+                                if (err) return console.log(err)
+                                // res.send({check: true})
+                            })
+                    }
+                        object = {
+                            type: "comment",
+                            name: user.name,
+                            lastName:  user.lastName,
+                            date: Date.now(),
+                            id: req.params.userId,
+                            idPost: req.body.post.mainPostId
+                        }
+
+
+                    userCollection.findOneAndUpdate({_id: ObjectId(req.params.userId)}, {$push: {"notification.arrayNotification":object},$inc: {"notification.countNotification":1}},
+                        function (err, user2) {
+                            if (err) return console.log(err)
+                            // res.send({check: true})
+                        })
+
+
+                })
+            }
+
+
+
+
             res.send(req.body.post)
         })
 
 })
 
-app.get('/countMainPost/:userId/:postId', function (req,res) { //пост в ветку
+app.get('/countMainPost/:userId/:postId', function (req,res) {
     const collection = req.app.locals.collection.collection("post");
     let postIdNumber = Number(req.params.postId)
 
@@ -322,9 +361,6 @@ app.get('/countMainPost/:userId/:postId', function (req,res) { //пост в в�
             if (err) return console.log(err)
             res.send(data)
         })
-
-
-
 })
 
 
@@ -334,7 +370,130 @@ app.get('/getBranchPost/:userId/:postId', function (req,res) {
     collection.findOne({userId:  req.params.userId, postId: req.params.postId }, function (err, posts) {
         if(err) return console.log(err)
         if(posts){
-            res.send(posts.branchPosts)
+            let arrIdSender = []
+            let arrIdAnswer = []
+            for(let i = 0; i < posts.branchPosts.length; i++){
+                let flag = true
+                let answerFlag = true
+                for(let j = 0; j < i; j++){
+                    if(posts.branchPosts[i].senderID == posts.branchPosts[j].senderID){
+                        flag = false
+                    }
+                    if(posts.branchPosts[i].answerUserId == posts.branchPosts[j].answerUserId){
+                        answerFlag = false
+                    }
+                }
+                if(flag){
+                    arrIdSender.push( ObjectId(posts.branchPosts[i].senderID))
+                }
+                if(answerFlag){
+                    arrIdAnswer.push( ObjectId(posts.branchPosts[i].answerUserId))
+                }
+            }
+
+            const userCollection = req.app.locals.collection.collection("users");
+            userCollection.find({
+                _id : {$in: arrIdSender}
+            }).toArray(function(err, users) {
+                userCollection.find({
+                    _id : {$in: arrIdAnswer}
+                }).toArray(function(err, usersAnswer) {
+                    let sendObject = []
+                    for(let i = 0; i < posts.branchPosts.length;i++) {
+                        let newObject
+                        if(posts.branchPosts[i].answerCheck){
+                            for(let j = 0; j < users.length;j++) {
+                                if (posts.branchPosts[i].senderID == users[j]._id) {
+                                    for(let g = 0; g < usersAnswer.length;g++) {
+                                        if (posts.branchPosts[i].answerUserId == usersAnswer[g]._id) {
+                                            newObject =  {
+                                                id: posts.branchPosts[i].id,
+                                                textPost: posts.branchPosts[i].textPost,
+                                                postTime: posts.branchPosts[i].postTime,
+                                                countLike: posts.branchPosts[i].countLike,
+                                                LikeArray: posts.branchPosts[i].LikeArray,
+                                                senderID: posts.branchPosts[i].senderID,
+                                                mainPostId: posts.branchPosts[i].mainPostId,
+                                                answerCheck: posts.branchPosts[i].answerCheck,
+                                                name: users[j].name,
+                                                lastName: users[j].lastName,
+                                                avatar: users[j].avatar,
+                                                answerPostId: posts.branchPosts[i].answerPostId,
+                                                answerUserId: posts.branchPosts[i].answerUserId,
+                                                nameAnswer: usersAnswer[g].name,
+                                                lastNameAnswer: usersAnswer[g].lastName
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }else{
+                            for(let j = 0; j < users.length;j++) {
+                                if (posts.branchPosts[i].senderID == users[j]._id) {
+                                    newObject =  {
+                                        id: posts.branchPosts[i].id,
+                                        textPost: posts.branchPosts[i].textPost,
+                                        postTime: posts.branchPosts[i].postTime,
+                                        countLike: posts.branchPosts[i].countLike,
+                                        LikeArray: posts.branchPosts[i].LikeArray,
+                                        senderID: posts.branchPosts[i].senderID,
+                                        mainPostId: posts.branchPosts[i].mainPostId,
+                                        answerCheck: posts.branchPosts[i].answerCheck,
+                                        name: users[j].name,
+                                        lastName: users[j].lastName,
+                                        avatar: users[j].avatar
+                                    }
+                                }
+                            }
+                        }
+                        sendObject.push(newObject)
+                    }
+
+                    res.send(sendObject)
+                })
+                /*let newObject = {
+                    id: posts.branchPosts.id,
+                    textPost: posts.branchPosts.textPost,
+                    postTime: posts.branchPosts.postTime,
+                    countLike: posts.branchPosts.countLike,
+                    LikeArray: posts.branchPosts.LikeArray,
+                    senderID: posts.branchPosts.senderID,
+                    mainPostId: posts.branchPosts.mainPostId,
+                    answerCheck: posts.branchPosts.answerCheck,
+                    name: users.name,
+                    lastName: users.lastName,
+                    avatar: users.avatar
+                }*/
+              /*  let sendObject = []
+                for(let i = 0; i < posts.branchPosts.length;i++){
+                    let newObject
+                    for(let j = 0; j < users.length;j++){
+                        if(posts.branchPosts[i].senderID == users[j]._id){
+                            newObject =  {
+                                id: posts.branchPosts[i].id,
+                                textPost: posts.branchPosts[i].textPost,
+                                postTime: posts.branchPosts[i].postTime,
+                                countLike: posts.branchPosts[i].countLike,
+                                LikeArray: posts.branchPosts[i].LikeArray,
+                                senderID: posts.branchPosts[i].senderID,
+                                mainPostId: posts.branchPosts[i].mainPostId,
+                                answerCheck: posts.branchPosts[i].answerCheck,
+                                name: users[j].name,
+                                lastName: users[j].lastName,
+                                avatar: users[j].avatar,
+                                answerPostId: posts.branchPosts[i].answerPostId,
+                                answerUserId: posts.branchPosts[i].answerUserId
+                            }
+                        }
+                    }
+                    sendObject.push(newObject)
+                }
+
+*/
+              //  res.send(sendObject)
+            });
+
+
         }else {
             res.send([])
         }
@@ -367,10 +526,36 @@ app.get('/pressLikePost/:postId/:userId/:hostId', function (req,res) {
                     $inc: { "mainPagePost.$[elem].countLike" : 1 }
                  },
                 { arrayFilters: [ { "elem.id": postIdNumber } ]},
-                function (err, data) {
+                function  (err, data) {
                     if(err) return console.log(err)
+                    if(req.params.userId == req.params.hostId){
+                        res.send({check: true})
+                    }else {
+                        const userCollection = req.app.locals.collection.collection("users");
+                        userCollection.findOne({_id: ObjectId(req.params.userId)},function (err, user) {
+                            if (err) return console.log(err)
 
-                    res.send({check: true})
+                            let object = {
+                                type: "like",
+                                name: user.name,
+                                lastName:  user.lastName,
+                                date: Date.now(),
+                                id: req.params.userId,
+                            }
+                            userCollection.findOneAndUpdate({_id: ObjectId(req.params.hostId)}, {$push: {"notification.arrayNotification":object},$inc: {"notification.countNotification":1}},
+                                function (err, user2) {
+                                    if (err) return console.log(err)
+                                    res.send({check: true})
+                                })
+                        })
+                    }
+
+                    //
+                   /* userCollection.findOneAndUpdate({_id: ObjectId(req.params.hostId)}, {$push: {"notification.arrayNotification":obj}},
+                        function (err, post) {
+                            if (err) return console.log(err)
+                        })*/
+
                 })
         }else{
             collection.updateMany({userID: ObjectId(req.params.hostId)},
@@ -406,7 +591,23 @@ app.get('/addOrRemoveFriend/:userID/:hostId', function (req,res) {
                 },
                 function (err, data) {
                     if(err) return console.log(err)
-                    res.send({check: true})
+                        const userCollection = req.app.locals.collection.collection("users");
+                        userCollection.findOne({_id: ObjectId(req.params.userID)},function (err, user) {
+                            if (err) return console.log(err)
+
+                            let object = {
+                                type: "addFriend",
+                                name: user.name,
+                                lastName:  user.lastName,
+                                date: Date.now(),
+                                id: req.params.userID,
+                            }
+                            userCollection.findOneAndUpdate({_id: ObjectId(req.params.hostId)}, {$push: {"notification.arrayNotification":object},$inc: {"notification.countNotification":1}},
+                                function (err, user2) {
+                                    if (err) return console.log(err)
+                                    res.send({check: true})
+                                })
+                        })
                 })
         }else{
             collection.updateMany({_id: ObjectId(req.params.userID)},
@@ -489,7 +690,7 @@ app.post("/upload/:id", upload.single("avatar"), function (req, res, next) {
                 urlText+= '/'
             }
         }
-        collection.findOneAndUpdate({_id: ObjectId(req.params.id)}, {$set: {avatar: path.resolve(__dirname)+urlText}},
+        collection.findOneAndUpdate({_id: ObjectId(req.params.id)}, {$set: {avatar: "https://fierce-sierra-39213.herokuapp.com/"+urlText}},
             function (err, url) {
                 if(err) return console.log(err)
                 let textUrl = url.value.avatar
@@ -514,7 +715,7 @@ app.post("/upload/:id", upload.single("avatar"), function (req, res, next) {
                     })
                 }
 
-                res.send(path.resolve(__dirname) + urlText)
+                res.send("https://fierce-sierra-39213.herokuapp.com/" + urlText)
             })
     }else{
         res.send('/')
@@ -534,7 +735,7 @@ app.post("/uploadBackground/:id", upload.single("background"), function (req, re
                 urlText+= '/'
             }
         }
-        collection.findOneAndUpdate({_id: ObjectId(req.params.id)}, {$set: {"background.url": "http://localhost:3001/"+urlText}},
+        collection.findOneAndUpdate({_id: ObjectId(req.params.id)}, {$set: {"background.url":  "https://fierce-sierra-39213.herokuapp.com/"+urlText}},
             function (err, url) {
                 if(err) return console.log(err)
 
@@ -560,7 +761,7 @@ app.post("/uploadBackground/:id", upload.single("background"), function (req, re
                 }
 
 
-                res.send("http://localhost:3001/" + urlText)
+                res.send("https://fierce-sierra-39213.herokuapp.com/" + urlText)
             })
     }else{
         res.send('/')
@@ -610,7 +811,15 @@ app.post('/neuralAnswer', function (req,res) {
     res.send(data[0].toFixed(2))
 })
 
+app.post('/clearNotification', function (req,res) {
+    const collection = req.app.locals.collection.collection("users");
 
+    collection.findOneAndUpdate({_id: ObjectId(req.body.id)}, {$set: {"notification.arrayNotification": [], "notification.countNotification": 0}},
+        function (err, user2) {
+            if (err) return console.log(err)
+            res.send({check: true})
+        })
+})
 
 const client = new MongoClient("mongodb+srv://Nekekys:84dizonu@toad.lyb51.mongodb.net/toad?retryWrites=true&w=majority", { useNewUrlParser: true, useUnifiedTopology: true })
 
@@ -620,6 +829,20 @@ const client = new MongoClient("mongodb+srv://Nekekys:84dizonu@toad.lyb51.mongod
     // perform actions on the collection object
     client.close();
 });*/
+
+
+
+
+/*app.get('/addNewField', function (req,res) {
+    const collection = req.app.locals.collection.collection("users");
+
+    collection.updateMany({},
+        {  $set: {notification: {countNotification: 0, arrayNotification: []}} },
+        function (err, data) {
+            if (err) return console.log(err)
+            res.send("gotovo")
+        })
+})*/
 
 
 client.connect( function  (err, database) {
