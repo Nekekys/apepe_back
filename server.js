@@ -7,7 +7,10 @@ const multer  = require("multer");
 const fs = require('fs')
 const path = require('path')
 const events = require('events')
-
+const jwt = require("jsonwebtoken")
+const secretKey = "SECRET_KEY"
+const bcrypt = require('bcrypt');
+const saltRounds = 6;
 
 /*const mongoose = require("mongoose")*/
 let brain = require('brain.js');
@@ -38,7 +41,7 @@ app.use(bodyParser.json({limit: '50mb'}));
 app.use(bodyParser.urlencoded({limit: '50mb',extended: true}));
 
 app.use(cors({
-    origin: "https://apepe.surge.sh",//'http://localhost:3000', //'http://localhost:3002' //https://apepe.surge.sh
+    origin: "http://localhost:3000",//'http://localhost:3000', //'http://localhost:3002' //https://apepe.surge.sh
     "Access-Control-Allow-Origin": '*',
     methods: ['POST', 'PUT', 'GET', 'OPTIONS', 'HEAD'],
     credentials: true
@@ -100,18 +103,18 @@ app.get('/user/:userId', function (req,res) {
     collection.find({id: id}).toArray(function(err, user){
         res.send(user)
     })
-
 })
 
 app.post('/LoginIn', function (req,res) {
-
     const collection = req.app.locals.collection.collection("users");
     collection.findOne({login: req.body.login}, function(err, user){
         if(err) return console.log(err);
 
         if(user){
-            if(req.body.password === user.password){
-                res.send({check: true, user: user})
+
+            if(bcrypt.compareSync(req.body.password, user.password)){
+                let token = jwt.sign({id: user._id},secretKey,{expiresIn: "999h"})
+                res.send({check: true, user, token})
             }else {
                 res.send({check: false, err: 'Неправильный пароль'})
             }
@@ -127,36 +130,44 @@ app.post('/LoginIn', function (req,res) {
 
 app.post('/cookie', function (req,res) {
 
-    const collection = req.app.locals.collection.collection("users");
-    collection.findOne({login: req.body.login}, function(err, user){
-        if(err) return console.log(err);
+    if(req.body.token) {
+        let token = jwt.verify(req.body.token, secretKey)
+        const collection = req.app.locals.collection.collection("users");
 
-        if(user){
-            if(req.body.password === user.password){
-                let check = true
-                let obj = {
-                    id: user._id,
-                    time: Date.now()
-                }
-                for(let i = 0; i < arrayOnlineUsers.length; i++){
-                    if(arrayOnlineUsers[i].id == user._id){
-                        arrayOnlineUsers[i].time = Date.now()
-                        check = false
-                    }
-                }
-                if(check){
-                    arrayOnlineUsers.push(obj)
-                }
+        if (token) {
+            collection.findOne({_id: ObjectId(token.id)}, function (err, user) {
+                if (err) return console.log(err);
+                if (user) {
 
-                res.send({check: true, user: user})
+                        let check = true
+                        let obj = {
+                            id: user._id,
+                            time: Date.now()
+                        }
+                        for (let i = 0; i < arrayOnlineUsers.length; i++) {
+                            if (arrayOnlineUsers[i].id == user._id) {
+                                arrayOnlineUsers[i].time = Date.now()
+                                check = false
+                            }
+                        }
+                        if (check) {
+                            arrayOnlineUsers.push(obj)
+                        }
 
-            }else {
-                res.send({check: false, login: req.body.login})
-            }
-        }else{
+                        res.send({check: true, user: user})
+
+
+                } else {
+                    res.send({check: false})
+                }
+            })
+        }else {
             res.send({check: false})
         }
-    })
+    }else {
+        res.send({check: false})
+    }
+
 })
 
 /*app.get('/LoginOut', function (req,res) {
@@ -178,6 +189,7 @@ app.post('/registration', (req, res) => {
                 res.send({check: false, err: "Такая почта уже зарегестрированна"})
             }
             if(!check){
+                const passwordHash = bcrypt.hash(req.body.password, saltRounds)
                 let user = {
                     id: Math.round(Math.random()*10000000000),
                     name: req.body.name,
@@ -187,7 +199,7 @@ app.post('/registration', (req, res) => {
                     birthday: 1619032458843,
                     avatar: avatarArray[Math.floor(Math.random() * avatarArray.length)],
                     login: req.body.login,
-                    password: req.body.password,
+                    password: passwordHash,
                     friend: [],
                     email: req.body.email,
                     background: {
@@ -201,8 +213,8 @@ app.post('/registration', (req, res) => {
                 }
                 collection.insertOne(user, function (err, results) {
                     if(err) return res.send({check: false, err: "Не удалось зарегестрировать"})
-
-                    res.send({check: true,user: user})
+                    let token = jwt.sign({id: user._id},secretKey,{expiresIn: "999h"})
+                    res.send({check: true, user, token})
                     /*console.log(results.ops[0]._id)*/ // возращаем id
                     let post2 = {
                         userID: results.ops[0]._id,
